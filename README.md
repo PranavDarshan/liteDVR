@@ -2,7 +2,7 @@
 
 LiteDVR is a small self-hosted DVR for low-resource Debian hosts. It records RTSP H.264/H.265 streams using FFmpeg packet copy (-c copy): normal recordings are never decoded or transcoded.
 
-This repository implements the first two milestones: TOML configuration, SQLite bootstrap, health/system endpoints, a settings API, a container deployment, a systemd unit, and a supervised per-camera packet-copy recorder. CRUD management, recordings browsing, retention cleanup, Range streaming, and the detached UI remain later milestones.
+The project includes TOML/environment configuration, SQLite metadata, CRUD camera/group management, supervised per-camera recording, retention cleanup, HTTP Range MP4 playback, isolated live/playback sockets, and a detached frontend.
 
 ## Docker deployment
 

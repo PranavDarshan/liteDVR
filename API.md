@@ -6,9 +6,9 @@ GET /api/settings returns effective retention and default segment settings plus 
 
 PUT /api/settings accepts JSON containing either or both of these values:
 
-    {"retention_days": 60, "default_segment_minutes": 30}
+    {"retention_days": 60, "default_segment_minutes": 180}
 
-Retention is strictly 30, 60, or 90 days. Default segment length is strictly 30 or 60 minutes. Network bindings, CORS origins, FFmpeg path, and recording path come from TOML/environment and require a container restart.
+Retention is strictly 30, 60, or 90 days. Segment length is always 180 minutes; submitted values are normalized to 180. Network bindings, CORS origins, FFmpeg path, and recording path come from TOML/environment and require a container restart.
 
 ## Recordings
 

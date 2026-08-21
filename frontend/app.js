@@ -1,5 +1,9 @@
 const apiInput = document.querySelector("#api-base");
-apiInput.value = localStorage.getItem("litedvr-api") || apiInput.value;
+const defaultApi = window.location.protocol + "//" + window.location.hostname + ":8080/api";
+const savedApi = localStorage.getItem("litedvr-api");
+// A LAN browser must not inherit the development default localhost endpoint.
+apiInput.value = savedApi && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(savedApi)
+  ? savedApi : defaultApi;
 let api = apiInput.value.replace(/\/$/, "");
 const el = (selector) => document.querySelector(selector);
 
@@ -223,7 +227,7 @@ function renderDayTimeline(windows) {
     button.className = "timeline-segment " + (hasPlayable ? "complete" : hasActive ? "active" : "error");
     button.style.left = (window.index * 12.5) + "%";
     button.style.width = "12.5%";
-    button.title = windowLabel(window.index) + " - " + String(Math.floor((window.index + 1) * 3)).padStart(2, "0") + ":00";
+    button.setAttribute("aria-label", windowLabel(window.index) + " - " + String(Math.floor((window.index + 1) * 3)).padStart(2, "0") + ":00");
     const fills = [];
     let cursor = 0;
     window.chunks.slice().sort(function(a, b) {
@@ -296,7 +300,7 @@ function renderSegmentTimeline(window) {
     bar.className = "timeline-chunk";
     bar.style.left = chunkStart + "%";
     bar.style.width = Math.max(0.6, chunkEnd - chunkStart) + "%";
-    bar.title = prettyTime(chunk.start_time) + " - " + durationLabel(chunk.duration) + ". Drag anywhere on the bar to seek.";
+    bar.setAttribute("aria-label", prettyTime(chunk.start_time) + " - " + durationLabel(chunk.duration) + ". Drag anywhere on the bar to seek.");
     chunksLayer.append(bar);
     cursor = Math.max(cursor, chunkEnd);
   });
@@ -854,7 +858,7 @@ function renderDayTimelineLegacy(items) {
     segment.className = "timeline-segment " + (recording.status === "ERROR" ? "error" : recording.status === "RECORDING" ? "active" : recording.status === "INTERRUPTED" ? "partial" : "complete");
     segment.style.left = Math.min(100, start / dayLength * 100) + "%";
     segment.style.width = Math.min(100, duration / dayLength * 100) + "%";
-    segment.title = prettyTime(recording.start_time) + " - " + durationLabel(recording.duration);
+    segment.setAttribute("aria-label", prettyTime(recording.start_time) + " - " + durationLabel(recording.duration));
     segment.textContent = recording.monitor_name;
     segment.onclick = function() {
       showPlayback(recording, playableQueueFor(recording, items));

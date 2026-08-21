@@ -1,11 +1,11 @@
 # Configuration
 
-The default configuration file is /etc/litedvr/config.toml. Retention is restricted to 30, 60, or 90 days; 30 is the default. Segment length is restricted to 30 or 60 minutes; 60 is the default.
+The default configuration file is `/etc/litedvr/config.toml`. Retention is restricted to 30, 60, or 90 days; 30 is the default. Recording cuts are fixed at 180 minutes (three hours); this is not user-configurable.
 
-allowed_origins is an explicit list for detached LAN frontends. Do not use a wildcard when authentication is introduced.
+`allowed_origins` accepts comma-separated exact origins and shell-style patterns. The Docker deployment allows localhost, 127.0.0.1, and `http://192.168.*` for LAN frontends. Narrow this pattern before exposing the service outside a trusted private network.
 
 ## Docker environment
 
-When running in Docker, environment variables take precedence over TOML. Copy .env.example to .env and configure retention, default segment length, CORS origins, and mock mode there.
+When running in Docker, environment variables take precedence over TOML. Copy `.env.example` to `.env` and configure retention, CORS origins, storage, platform, and mock mode there. The segment-size variable is retained for compatibility but is normalized to 180 minutes.
 
-GET /api/settings and PUT /api/settings manage retention and default segment choice at runtime. Network, CORS, FFmpeg, and storage-path changes must be made through TOML/environment then followed by a restart.
+GET /api/settings and PUT /api/settings manage retention and expose the fixed 180-minute segment setting. Network, CORS, FFmpeg, and storage-path changes must be made through TOML/environment then followed by a restart.
