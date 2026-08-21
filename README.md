@@ -155,3 +155,6 @@ The i386 image must be built on native i386 or with Buildx emulation, and should
 Before adding a real camera, run scripts/probe-target.sh on the i386 Debian machine. It checks architecture, Python packages, FFmpeg, and RTSP support. Then use one real camera and inspect CPU/RSS before enabling more cameras.
 
 See INSTALL.md, CONFIGURATION.md, and ARCHITECTURE.md.
+
+For a reusable AI prompt and repository-specific troubleshooting context, see
+[LLM_GUIDE.md](LLM_GUIDE.md).
