@@ -135,7 +135,7 @@ class Recorder:
             return [self.config.ffmpeg_path, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
                     "testsrc=size=320x240:rate=1", "-t", "1", "-c:v", "mpeg4", "-y", str(output)]
         source = rtsp_with_credentials(self.monitor.rtsp_url, self.monitor.username, self.monitor.password)
-        command = [self.config.ffmpeg_path, "-hide_banner", "-loglevel", "warning", "-rtsp_transport", "tcp",
+        command = [self.config.ffmpeg_path, "-hide_banner", "-loglevel", "warning", "-err_detect", "ignore_err", "-fflags", "+discardcorrupt", "-rtsp_transport", "tcp",
                 "-i", source, "-map", "0:v:0"]
         if include_audio:
             command.extend(["-map", "0:a?"])
