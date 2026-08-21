@@ -144,7 +144,7 @@ class Recorder:
                 str(max(1, duration)), "-movflags",
                 "+frag_keyframe+empty_moov+default_base_moof+separate_moof",
                 "-frag_duration", "1000000", "-flush_packets", "1", "-y", str(output),
-                "-map", "0:v:0", "-an", "-vf", "fps=5", "-c:v", "mjpeg", "-q:v", "6",
+                "-map", "0:v:0", "-an", "-vf", "fps=2,scale=640:-2", "-c:v", "mjpeg", "-q:v", "8",
                 "-f", "mjpeg", "pipe:1"]
 
     async def _run(self) -> None:
@@ -177,6 +177,7 @@ class Recorder:
                 self._process = await asyncio.create_subprocess_exec(
                     *self._command(path, include_audio=False, duration_seconds=segment_duration), **spawn_options)
                 self.status = "RECORDING"
+                process_started = datetime.now(UTC)
                 self._live_task = asyncio.create_task(self._pump_live(self._process.stdout))
                 stderr_task = asyncio.create_task(self._process.stderr.read())
                 await self._process.wait()
@@ -193,6 +194,11 @@ class Recorder:
                     await self._live_task
                     stderr = await stderr_task
                 okay = self._process.returncode == 0
+                elapsed = (datetime.now(UTC) - process_started).total_seconds()
+                diagnostic = redact_rtsp_credentials(stderr.decode(errors="replace")[-2000:]).strip()
+                LOG.info("FFmpeg exited for monitor %s: code=%s elapsed=%.1fs", self.monitor.id, self._process.returncode, elapsed)
+                if diagnostic:
+                    LOG.warning("FFmpeg diagnostic for monitor %s: %s", self.monitor.id, diagnostic)
                 await self._record_finish(record_id, started, path, okay)
                 if okay:
                     delay = 5
