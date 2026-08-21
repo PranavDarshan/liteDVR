@@ -13,7 +13,7 @@ class Config:
     recordings_path: Path = Path("/var/lib/litedvr/recordings")
     ffmpeg_path: str = "ffmpeg"
     retention_days: int = 30
-    default_segment_minutes: int = 60
+    default_segment_minutes: int = 180
     allowed_origins: tuple[str, ...] = field(default_factory=tuple)
     mock_mode: bool = False
 
@@ -40,6 +40,6 @@ def load_config(path: str | Path = "/etc/litedvr/config.toml") -> Config:
         recordings_path=Path(env.get("LITEDVR_RECORDINGS_PATH", storage.get("recordings_path", "/var/lib/litedvr/recordings"))),
         ffmpeg_path=env.get("LITEDVR_FFMPEG_PATH", recorder.get("ffmpeg_path", "ffmpeg")),
         retention_days=int(env.get("LITEDVR_RETENTION_DAYS", storage.get("retention_days", 30))),
-        default_segment_minutes=int(env.get("LITEDVR_DEFAULT_SEGMENT_MINUTES", recorder.get("default_segment_minutes", 60))),
+        default_segment_minutes=int(env.get("LITEDVR_DEFAULT_SEGMENT_MINUTES", recorder.get("default_segment_minutes", 180))),
         allowed_origins=tuple(origins.split(",") if origins else cors.get("allowed_origins", [])),
         mock_mode=env.get("LITEDVR_MOCK_MODE", str(recorder.get("mock_mode", False))).lower() == "true")

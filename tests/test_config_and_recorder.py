@@ -7,7 +7,7 @@ from litedvr.recorder import Monitor, Recorder, safe_part, rtsp_with_credentials
 def test_defaults_match_specification():
     config = Config()
     assert config.retention_days == 30
-    assert config.default_segment_minutes == 60
+    assert config.default_segment_minutes == 180
 
 @pytest.mark.parametrize("days", [0, 31, 120])
 def test_invalid_retention_is_rejected(days):

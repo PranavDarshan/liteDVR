@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS monitors (
  id INTEGER PRIMARY KEY, group_id INTEGER REFERENCES monitor_groups(id) ON DELETE RESTRICT,
  name TEXT NOT NULL, rtsp_url TEXT NOT NULL, username TEXT, password TEXT,
  enabled INTEGER NOT NULL DEFAULT 1, recording_enabled INTEGER NOT NULL DEFAULT 1,
- segment_minutes INTEGER NOT NULL DEFAULT 60 CHECK(segment_minutes IN (30,60,180,1440)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+ segment_minutes INTEGER NOT NULL DEFAULT 180 CHECK(segment_minutes IN (30,60,180,1440)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS recordings (
  id INTEGER PRIMARY KEY, monitor_id INTEGER REFERENCES monitors(id) ON DELETE SET NULL,
  monitor_name TEXT, group_name TEXT,
@@ -28,7 +28,7 @@ async def open_database(path: Path) -> aiosqlite.Connection:
     monitor_sql_row = await (await db.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='monitors'")).fetchone()
     monitor_sql = monitor_sql_row[0] if monitor_sql_row else ""
-    if "segment_minutes INTEGER NOT NULL DEFAULT 60 CHECK(segment_minutes IN (30,60,180,1440))" not in monitor_sql:
+    if "segment_minutes INTEGER NOT NULL DEFAULT 180 CHECK(segment_minutes IN (30,60,180,1440))" not in monitor_sql:
         await db.executescript("""
         PRAGMA foreign_keys = OFF;
         ALTER TABLE monitors RENAME TO monitors_legacy;
@@ -36,13 +36,16 @@ async def open_database(path: Path) -> aiosqlite.Connection:
          id INTEGER PRIMARY KEY, group_id INTEGER REFERENCES monitor_groups(id) ON DELETE RESTRICT,
          name TEXT NOT NULL, rtsp_url TEXT NOT NULL, username TEXT, password TEXT,
          enabled INTEGER NOT NULL DEFAULT 1, recording_enabled INTEGER NOT NULL DEFAULT 1,
-         segment_minutes INTEGER NOT NULL DEFAULT 60 CHECK(segment_minutes IN (30,60,180,1440)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+         segment_minutes INTEGER NOT NULL DEFAULT 180 CHECK(segment_minutes IN (30,60,180,1440)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
         INSERT INTO monitors(id,group_id,name,rtsp_url,username,password,enabled,recording_enabled,segment_minutes,created_at,updated_at)
         SELECT id,group_id,name,rtsp_url,username,password,enabled,recording_enabled,segment_minutes,created_at,updated_at
         FROM monitors_legacy;
         DROP TABLE monitors_legacy;
         PRAGMA foreign_keys = ON;
         """)
+    # Segment length is a product invariant: normalize legacy 30/60/1440
+    # minute rows so old databases also report and use 3-hour cuts.
+    await db.execute("UPDATE monitors SET segment_minutes=180 WHERE segment_minutes<>180")
     foreign_key = await (await db.execute("PRAGMA foreign_key_list(recordings)" )).fetchone()
     # Rebuild recordings if an older migration left its FK pointing at the
     # temporary monitors_legacy table (or used the wrong delete action).
