@@ -144,7 +144,7 @@ class Recorder:
                 str(max(1, duration)), "-movflags",
                 "+frag_keyframe+empty_moov+default_base_moof+separate_moof",
                 "-frag_duration", "1000000", "-flush_packets", "1", "-y", str(output),
-                "-map", "0:v:0", "-an", "-vf", "fps=5,scale=640:-2", "-c:v", "mjpeg", "-q:v", "8",
+                "-map", "0:v:0", "-an", "-vf", "fps=5", "-c:v", "mjpeg", "-q:v", "6",
                 "-f", "mjpeg", "pipe:1"]
 
     async def _run(self) -> None:
