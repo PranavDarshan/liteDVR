@@ -1,0 +1,19 @@
+[Unit]
+Description=LiteDVR packet-copy recorder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=litedvr
+Group=litedvr
+ExecStart=/opt/litedvr/.venv/bin/litedvr --config /etc/litedvr/config.toml
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ReadWritePaths=/var/lib/litedvr
+
+[Install]
+WantedBy=multi-user.target

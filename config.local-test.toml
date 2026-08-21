@@ -1,0 +1,16 @@
+[server]
+bind_address = "127.0.0.1"
+port = 8080
+
+[storage]
+database_path = "C:/Users/prana/Desktop/liteDVR/.local-data/litedvr.sqlite3"
+recordings_path = "C:/Users/prana/Desktop/liteDVR/.local-data/recordings"
+retention_days = 30
+
+[recorder]
+ffmpeg_path = "C:/Users/prana/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-9.0-full_build/bin/ffmpeg.exe"
+default_segment_minutes = 60
+mock_mode = false
+
+[cors]
+allowed_origins = ["http://localhost:8081"]

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LiteDVR | Operations</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<div class="app-shell">
+<aside class="sidebar">
+	<div class="brand"><span class="brand-mark">L</span><div><strong>LiteDVR</strong><small>VIDEO OPERATIONS</small></div></div>
+	<nav class="tabs" aria-label="Primary navigation">
+		<button class="tab active" data-tab="overview">Overview</button>
+		<button class="tab" data-tab="monitor">Monitor</button>
+		<button class="tab" data-tab="cameras">Cameras</button>
+		<button class="tab" data-tab="recordings">Recordings</button>
+		<button class="tab" data-tab="settings">Settings</button>
+	</nav>
+	<div class="sidebar-footer"><span class="status-dot"></span><span id="server">Checking backend...</span></div>
+</aside>
+<main>
+<header class="topbar"><div><p class="eyebrow">CONTROL ROOM / LIVE</p><h1>Video operations</h1></div><div class="api"><label>API endpoint<input id="api-base" value="http://localhost:8080/api"></label><button id="save-api">Connect</button></div></header>
+<p id="message" role="status"></p>
+<section class="tab-panel active" data-panel="overview">
+	<div class="page-heading"><div><p class="eyebrow">SYSTEM SNAPSHOT</p><h2>Good evening, operator.</h2></div><button class="primary jump-cameras" type="button">Manage cameras</button></div>
+	<div class="metrics"><article><span class="metric-label">Cameras</span><strong id="metric-cameras">--</strong><small>configured monitors</small></article><article><span class="metric-label">Recording now</span><strong id="metric-recording">--</strong><small>active capture jobs</small></article><article><span class="metric-label">Storage free</span><strong id="metric-storage">--</strong><small id="metric-storage-detail">waiting for backend</small></article><article><span class="metric-label">Uptime</span><strong id="metric-uptime">--</strong><small>backend availability</small></article></div>
+	<div class="overview-grid"><section class="inset"><div class="section-title"><div><p class="eyebrow">RECENT ACTIVITY</p><h3>Latest recordings</h3></div><button class="link-button jump-recordings" type="button">View archive</button></div><div id="recent-recordings" class="list compact"></div></section><section class="inset"><div class="section-title"><div><p class="eyebrow">FLEET STATUS</p><h3>Camera health</h3></div><button class="link-button jump-cameras" type="button">Open fleet</button></div><div id="overview-monitors" class="list compact"></div></section></div>
+</section>
+<section class="tab-panel" data-panel="monitor"><div class="page-heading"><div><p class="eyebrow">LIVE SURVEILLANCE</p><h2>Monitor wall</h2></div><div class="monitor-controls"><label>Camera group<select id="monitor-group-filter"><option value="">All groups</option></select></label><button id="monitor-prev" type="button">Previous</button><span id="monitor-page">Page 1</span><button id="monitor-next" type="button">Next</button><button id="start-live" type="button">Start live</button><button id="stop-live" type="button">Stop all live</button><button id="monitor-fullscreen" type="button">Full wall</button></div></div><section class="monitor-wall" id="monitor-wall"></section></section>
+<div id="live-view-overlay" class="live-view-overlay" hidden><button id="close-live-view" class="close-live-view" type="button" aria-label="Close full view">x</button><img id="live-view-image" alt="Full camera view"></div>
+<section class="tab-panel" data-panel="cameras"><div class="page-heading"><div><p class="eyebrow">FLEET MANAGEMENT</p><h2>Camera network</h2></div><span class="section-note">Configure RTSP sources and recording rules</span></div>
+<div class="content-grid"><section class="inset"><div class="section-title"><div><p class="eyebrow">NEW SOURCE</p><h3>Add camera</h3></div></div><form id="monitor-form" class="form-grid">
+<label>Name<input name="name" required maxlength="120" placeholder="Front Door"></label>
+<label>Group<select name="group_id" id="monitor-group" required></select></label>
+<label class="wide">RTSP URL<input name="rtsp_url" required placeholder="rtsp://192.168.1.50:554/stream1"></label>
+<label>Username<input name="username" autocomplete="username"></label><label>Password<input name="password" type="password" autocomplete="new-password"></label>
+<label class="toggle-field"><input name="recording_enabled" type="checkbox" checked><span class="toggle-track"><span></span></span><span>Record continuously</span></label><button class="wide">Save camera</button>
+</form></section><section class="inset organization-panel"><div class="section-title"><div><p class="eyebrow">ORGANIZATION</p><h3>Camera groups</h3><small>Keep cameras arranged by location or purpose.</small></div></div><form id="group-form"><label for="group-name">New group</label><div class="group-entry"><input id="group-name" required maxlength="120" placeholder="e.g. Outside"><button type="submit">Add group</button></div></form><div id="groups" class="list"></div></section></div>
+<section class="inset full-width"><div class="section-title"><div><p class="eyebrow">MONITORS</p><h3>All cameras</h3></div></div><div id="monitors" class="list"></div></section></section>
+<section class="tab-panel" data-panel="recordings" id="recordings-section"><div class="page-heading"><div><p class="eyebrow">VIDEO TIMELINE</p><h2>Recordings</h2></div><span class="section-note">Pick a day, scrub the bar, and open any captured segment instantly</span></div><section class="inset">
+<form id="recording-filters" class="form-grid">
+<div class="archive-group-filter"><span class="filter-label">Group</span><div id="recording-group-tabs" class="filter-tabs" role="tablist" aria-label="Filter recordings by group"></div><select id="recording-group" aria-hidden="true"><option value="">All groups</option></select></div>
+<div class="archive-camera-filter wide"><span class="filter-label">Camera</span><div id="recording-camera-tabs" class="filter-tabs" role="tablist" aria-label="Filter recordings by camera"></div></div>
+<label>Date<input id="recording-date" type="date"></label>
+<label>Sort<select id="recording-sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
+<button>Apply filters</button>
+</form>
+<div class="timeline-toolbar"><button id="previous-day" type="button">Previous day</button><button id="today-timeline" type="button">Today</button><button id="next-day" type="button">Next day</button><span id="timeline-date-label"></span></div><p id="timeline-status" class="timeline-status" role="status">Select one camera, then choose a 3-hour cut.</p><div id="timeline" class="timeline" aria-label="24 hour recording cuts"></div>
+</section>
+<section id="playback-section" class="inset" hidden><div class="section-title"><div><p class="eyebrow">PLAYER</p><h3 id="playback-title">Playback</h3></div><div class="playback-meta"><span id="playback-clock">--:--:--</span><label class="playback-speed">Speed<select id="playback-speed" aria-label="Playback speed"><option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="0.75">0.75x</option><option value="1" selected>1x</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="2">2x</option><option value="4">4x</option><option value="8">8x</option><option value="16">16x</option><option value="25">25x</option></select></label></div></div>
+<div class="playback-global"><button id="playback-toggle" type="button">Play</button><span id="playback-range-label">3h segment</span></div>
+<video id="player" playsinline preload="auto"></video><div id="segment-timeline" class="segment-timeline" aria-label="Selected 3 hour recording timeline"></div>
+<div class="player-actions"><a id="download" class="button" download>Download</a><button id="close-player" type="button">Close player</button></div>
+</section></section>
+<section class="tab-panel" data-panel="settings"><div class="page-heading"><div><p class="eyebrow">SYSTEM PREFERENCES</p><h2>Settings</h2></div></div><section class="inset"><div class="section-title"><div><p class="eyebrow">RECORDING POLICY</p><h3>Recorder defaults</h3></div></div><form id="settings-form" class="form-grid">
+<label>Retention<select name="retention_days"><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></label>
+<label class="wide">Recording path<input name="recordings_path" placeholder="C:\\Recordings"></label><p class="section-note wide">Recording segments are fixed at 3 hours.</p><button>Save defaults</button>
+</form></section></section>
+</main></div><script src="app.js?v=20260821-41"></script></body></html>

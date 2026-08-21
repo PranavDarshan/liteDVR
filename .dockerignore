@@ -1,0 +1,10 @@
+.git
+.pytest_cache
+__pycache__
+*.py[cod]
+*.egg-info
+tests
+systemd
+scripts
+frontend
+config.local-test.toml

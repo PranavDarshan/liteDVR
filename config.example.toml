@@ -1,0 +1,17 @@
+[server]
+bind_address = "0.0.0.0"
+port = 8080
+
+[storage]
+database_path = "/var/lib/litedvr/litedvr.sqlite3"
+recordings_path = "/var/lib/litedvr/recordings"
+retention_days = 30
+
+[recorder]
+ffmpeg_path = "/usr/bin/ffmpeg"
+# Fixed DVR cut size. Camera creation always uses 180 minutes.
+default_segment_minutes = 180
+mock_mode = false
+
+[cors]
+allowed_origins = ["http://192.168.1.10:5173"]
