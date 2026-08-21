@@ -4,6 +4,27 @@ LiteDVR is a small self-hosted DVR for low-resource Debian hosts. It records RTS
 
 The project includes TOML/environment configuration, SQLite metadata, CRUD camera/group management, supervised per-camera recording, retention cleanup, HTTP Range MP4 playback, isolated live/playback sockets, and a detached frontend.
 
+## Screenshots
+
+The web interface includes camera configuration, live monitoring, recording
+playback, and the system overview dashboard.
+
+### Overview
+
+![LiteDVR overview](assets/Overview.png)
+
+### Camera configuration
+
+![LiteDVR camera configuration](assets/Cameras.png)
+
+### Monitor wall
+
+![LiteDVR monitor wall](assets/Monitors.png)
+
+### Recordings and playback
+
+![LiteDVR recordings](assets/Recordings.png)
+
 ## Docker deployment
 
 Copy `.env.example` to `.env`, set `LITEDVR_DATA_DIR` to a directory with enough disk space, then pull and start the stack:
