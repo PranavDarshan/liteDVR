@@ -49,3 +49,9 @@ body{background:#090a0a!important}
 /* Hour labels on the 24-hour bar stay readable over a fully recorded block. */
 .day-track .timeline-segment{padding:0!important;text-align:left!important;color:transparent!important;overflow:visible!important}
 .day-track .timeline-segment>span{position:absolute;top:3px;left:4px;z-index:5;display:block;padding:1px 4px;background:rgba(18,21,20,.82);color:#f1f3ef;font-size:12px;font-weight:700;line-height:16px;text-shadow:0 1px 2px #000;white-space:nowrap;pointer-events:none}
+
+/* Keep the lower player's half-hour timestamps visible above the seek track. */
+.segment-timeline{height:58px!important;overflow:visible!important;margin-top:28px!important;margin-bottom:24px!important}
+.segment-timeline .track-labels{top:-22px!important;right:0!important;bottom:auto!important;left:0!important;display:flex!important;justify-content:space-between!important;align-items:flex-end!important;height:18px!important;color:#aeb5b0!important;font-size:10px!important;line-height:14px!important;z-index:12!important}
+.segment-timeline .track-labels span{display:block!important;transform:none!important;white-space:nowrap!important}
+.segment-timeline .timeline-time-label{top:3px!important;left:6px!important;color:#eef1ed!important;background:rgba(17,19,19,.9)!important;font-size:12px!important;font-weight:700!important;z-index:13!important}

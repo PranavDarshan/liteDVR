@@ -6,14 +6,39 @@ The project includes TOML/environment configuration, SQLite metadata, CRUD camer
 
 ## Docker deployment
 
-Copy `.env.example` to `.env`, set `LITEDVR_DATA_DIR` to a directory with enough disk space, then build and start the stack:
+Copy `.env.example` to `.env`, set `LITEDVR_DATA_DIR` to a directory with enough disk space, then pull and start the stack:
 
-    docker compose build
+    docker pull pranavdarshan1/litedvr:latest
+    docker pull pranavdarshan1/litedvr-frontend:latest
     docker compose up -d
 
 On Debian systems without the Compose V2 plugin, install `docker-compose` and
-run the same commands with a hyphen (`docker-compose build`,
+run the same commands with a hyphen (`docker-compose pull`,
 `docker-compose up -d`).
+
+The published images are used by default:
+
+    pranavdarshan1/litedvr:latest
+    pranavdarshan1/litedvr-frontend:latest
+
+### Published Docker images
+
+The complete application is distributed as these two images:
+
+| Image | Purpose |
+| --- | --- |
+| [`pranavdarshan1/litedvr:latest`](https://hub.docker.com/r/pranavdarshan1/litedvr) | Backend API, recorder, FFmpeg integration, and MP4 playback |
+| [`pranavdarshan1/litedvr-frontend:latest`](https://hub.docker.com/r/pranavdarshan1/litedvr-frontend) | Nginx-hosted web interface |
+
+Pull both images explicitly when preparing a host:
+
+    docker pull pranavdarshan1/litedvr:latest
+    docker pull pranavdarshan1/litedvr-frontend:latest
+
+The Compose file starts both images together and exposes the frontend on
+port `8081` and the backend API on port `8080`.
+
+For a local source build instead of Docker Hub images, run `docker-compose up -d --build`.
 
 Open `http://<debian-host>:8081`. The backend is on port 8080 and the frontend on port 8081. The database and MP4 files are persisted under `LITEDVR_DATA_DIR`; do not remove that directory during upgrades.
 
@@ -23,7 +48,7 @@ For a no-Docker local test on Windows, use config.local-test.toml and run the ba
 
 The detached frontend includes a recordings view with filters, a metadata-based timeline, standard HTML5 MP4 playback, seeking through Range requests, and download links. It intentionally does not provide a live RTSP view.
 
-To publish images, authenticate on a build machine and provide your Docker Hub namespace:
+Maintainers can publish updated images from a build machine with:
 
     docker login
     docker buildx build --platform linux/386,linux/amd64 -t <namespace>/litedvr:latest --push .

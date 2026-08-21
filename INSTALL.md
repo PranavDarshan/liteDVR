@@ -7,7 +7,7 @@ On the Debian laptop, install Docker Engine and Compose, then:
     cp .env.example .env
     mkdir -p ./litedvr-data
     sed -i 's#LITEDVR_DATA_DIR=.*#LITEDVR_DATA_DIR=./litedvr-data#' .env
-    docker compose build
+    docker compose pull
     docker compose up -d
 
 If `docker compose` reports “compose is not a docker command”, install the
@@ -15,10 +15,13 @@ Debian legacy client and use the hyphenated command instead:
 
     sudo apt update
     sudo apt install docker-compose
-    docker-compose build
+    docker-compose pull
     docker-compose up -d
 
-The project Compose file supports both command forms. Check availability with
+The project Compose file supports both command forms and uses the published
+`pranavdarshan1/litedvr` and `pranavdarshan1/litedvr-frontend` images by
+default. To build from checked-out source instead, append `--build` to the
+`up` command. Check availability with
 `docker compose version` or `docker-compose --version`.
 
 Check the services with `docker compose ps` (or `docker-compose ps`) and `curl http://127.0.0.1:8080/api/health`. Use the matching `logs -f litedvr` command for recorder/FFmpeg diagnostics. Back up `LITEDVR_DATA_DIR` before upgrades.

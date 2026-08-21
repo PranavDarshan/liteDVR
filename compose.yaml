@@ -1,7 +1,7 @@
 services:
   litedvr:
     build: .
-    image: ${LITEDVR_IMAGE:-litedvr:local}
+    image: ${LITEDVR_IMAGE:-pranavdarshan1/litedvr:latest}
     platform: ${LITEDVR_PLATFORM:-linux/386}
     container_name: litedvr
     restart: unless-stopped
@@ -27,7 +27,7 @@ services:
       start_period: 10s
   frontend:
     build: ./frontend
-    image: ${LITEDVR_FRONTEND_IMAGE:-litedvr-frontend:local}
+    image: ${LITEDVR_FRONTEND_IMAGE:-pranavdarshan1/litedvr-frontend:latest}
     platform: ${LITEDVR_PLATFORM:-linux/386}
     container_name: litedvr-frontend
     restart: unless-stopped
