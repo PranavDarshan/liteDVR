@@ -25,6 +25,63 @@ playback, and the system overview dashboard.
 
 ![LiteDVR recordings](assets/Recordings.png)
 
+## Running LiteDVR as a systemd service
+
+Use this deployment mode only when FFmpeg and the LiteDVR backend should run
+directly on Debian rather than in Docker. Choose either this native mode or
+the Docker Compose mode below; do not run both on port `8080` at the same
+time. If you use Docker Compose, leave the native `litedvr.service` disabled.
+
+Install the runtime and create the service account:
+
+    sudo apt update
+    sudo apt install -y python3-venv ffmpeg
+    sudo useradd --system --create-home --home-dir /opt/litedvr litedvr || true
+    sudo mkdir -p /opt/litedvr /var/lib/litedvr/recordings /etc/litedvr
+    sudo chown -R litedvr:litedvr /opt/litedvr /var/lib/litedvr
+
+Install LiteDVR from the checked-out project:
+
+    sudo python3 -m venv /opt/litedvr/.venv
+    sudo /opt/litedvr/.venv/bin/pip install .
+    sudo cp config.example.toml /etc/litedvr/config.toml
+    sudo chown litedvr:litedvr /etc/litedvr/config.toml
+
+Review `/etc/litedvr/config.toml` (RTSP cameras, bind address, and recording
+path), then install and start the included unit:
+
+    sudo cp systemd/litedvr.service /etc/systemd/system/litedvr.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now litedvr
+    sudo systemctl status litedvr --no-pager
+
+Useful diagnostics:
+
+    journalctl -u litedvr -f
+    systemctl restart litedvr
+    systemctl stop litedvr
+
+### Keep recording when the laptop lid closes
+
+Configure systemd-logind to ignore lid events. This keeps the machine awake
+when the lid is closed (ensure it has adequate ventilation):
+
+    sudo mkdir -p /etc/systemd/logind.conf.d
+    sudo tee /etc/systemd/logind.conf.d/10-litedvr-lid.conf >/dev/null <<'EOF'
+    [Login]
+    HandleLidSwitch=ignore
+    HandleLidSwitchExternalPower=ignore
+    HandleLidSwitchDocked=ignore
+    EOF
+    sudo systemctl restart systemd-logind
+
+Verify the effective settings with:
+
+    loginctl show-logind -p HandleLidSwitch -p HandleLidSwitchExternalPower -p HandleLidSwitchDocked
+
+If the laptop still suspends, also check desktop power-management settings and
+the BIOS/firmware power policy. Keep the laptop ventilated while closed.
+
 ## Docker deployment
 
 Copy `.env.example` to `.env`, set `LITEDVR_DATA_DIR` to a directory with enough disk space, then pull and start the stack:
@@ -58,6 +115,24 @@ Pull both images explicitly when preparing a host:
 
 The Compose file starts both images together and exposes the frontend on
 port `8081` and the backend API on port `8080`.
+
+Compose is the recommended service manager for the container deployment. Both
+services use `restart: unless-stopped`, so Docker restarts them after a crash
+and starts them again when the Docker daemon starts after a reboot:
+
+    sudo systemctl enable --now docker
+    docker-compose up -d
+    docker-compose ps
+
+Confirm the restart policy:
+
+    docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' litedvr
+    docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' litedvr-frontend
+
+Both commands should print `unless-stopped`. To stop the optional native
+systemd service before using Docker Compose:
+
+    sudo systemctl disable --now litedvr
 
 For a local source build instead of Docker Hub images, run `docker-compose up -d --build`.
 
