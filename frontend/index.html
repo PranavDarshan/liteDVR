@@ -10,6 +10,7 @@
 		<button class="tab" data-tab="monitor">Monitor</button>
 		<button class="tab" data-tab="cameras">Cameras</button>
 		<button class="tab" data-tab="recordings">Recordings</button>
+		<button class="tab" data-tab="cleanup">Cleanup</button>
 		<button class="tab" data-tab="settings">Settings</button>
 	</nav>
 	<div class="sidebar-footer"><span class="status-dot"></span><span id="server">Checking backend...</span></div>
@@ -48,8 +49,9 @@
 <video id="player" playsinline preload="auto"></video><div id="segment-timeline" class="segment-timeline" aria-label="Selected 3 hour recording timeline"></div>
 <div class="player-actions"><a id="download" class="button" download>Download</a><button id="close-player" type="button">Close player</button></div>
 </section></section>
+<section class="tab-panel" data-panel="cleanup"><div class="page-heading"><div><p class="eyebrow">STORAGE MANAGEMENT</p><h2>Delete recordings</h2></div><span class="section-note">Remove completed recordings by day, week, or month</span></div><section class="inset cleanup-panel"><form id="cleanup-form" class="form-grid"><label>Period<select id="cleanup-scope"><option value="day">Selected day</option><option value="week">Calendar week</option><option value="month">Full month</option></select></label><label>Date<input id="cleanup-date" type="date" required></label><p id="cleanup-preview" class="section-note wide">Choose a date to preview the deletion range.</p><label class="toggle-field wide"><input id="cleanup-confirm" type="checkbox"><span class="toggle-track"><span></span></span><span>I understand this permanently deletes matching completed recordings.</span></label><button id="cleanup-submit" class="danger wide" type="submit" disabled>Delete recordings</button></form><p id="cleanup-result" class="timeline-status" role="status"></p></section></section>
 <section class="tab-panel" data-panel="settings"><div class="page-heading"><div><p class="eyebrow">SYSTEM PREFERENCES</p><h2>Settings</h2></div></div><section class="inset"><div class="section-title"><div><p class="eyebrow">RECORDING POLICY</p><h3>Recorder defaults</h3></div></div><form id="settings-form" class="form-grid">
 <label>Retention<select name="retention_days"><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></label>
 <label class="wide">Recording path<input name="recordings_path" placeholder="C:\\Recordings"></label><p class="section-note wide">Recording segments are fixed at 3 hours.</p><button>Save defaults</button>
 </form></section></section>
-</main></div><script src="app.js?v=20260821-44"></script></body></html>
+</main></div><script src="app.js?v=20260821-47"></script></body></html>

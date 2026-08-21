@@ -11,6 +11,7 @@ retention_days = 30
 ffmpeg_path = "C:/Users/prana/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-9.0-full_build/bin/ffmpeg.exe"
 default_segment_minutes = 60
 mock_mode = false
+disable_recorders = true
 
 [cors]
 allowed_origins = ["http://localhost:8081"]

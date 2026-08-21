@@ -1,5 +1,8 @@
 const apiInput = document.querySelector("#api-base");
-const defaultApi = window.location.protocol + "//" + window.location.hostname + ":8080/api";
+const apiHost = /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
+  ? "192.168.29.2"
+  : window.location.hostname;
+const defaultApi = window.location.protocol + "//" + apiHost + ":8080/api";
 const savedApi = localStorage.getItem("litedvr-api");
 // A LAN browser must not inherit the development default localhost endpoint.
 apiInput.value = savedApi && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(savedApi)
@@ -290,8 +293,8 @@ function renderSegmentTimeline(window) {
   window.chunks.filter(isPlayable).slice().sort(function(a, b) {
     return a.start_time.localeCompare(b.start_time);
   }).forEach(function(chunk) {
-    const chunkStart = Math.max(0, (new Date(chunk.start_time).getTime() - start) / windowMs * 100);
-    const chunkEnd = Math.max(0, (new Date(chunk.end_time || chunk.start_time).getTime() - start) / windowMs * 100);
+    const chunkStart = Math.max(0, Math.min(100, (new Date(chunk.start_time).getTime() - start) / windowMs * 100));
+    const chunkEnd = Math.max(chunkStart, Math.min(100, (new Date(chunk.end_time || chunk.start_time).getTime() - start) / windowMs * 100));
     if (chunkStart > cursor) {
       gaps.push({left: cursor, width: chunkStart - cursor});
     }
@@ -299,7 +302,7 @@ function renderSegmentTimeline(window) {
     bar.type = "button";
     bar.className = "timeline-chunk";
     bar.style.left = chunkStart + "%";
-    bar.style.width = Math.max(0.6, chunkEnd - chunkStart) + "%";
+    bar.style.width = Math.min(100 - chunkStart, Math.max(0.6, chunkEnd - chunkStart)) + "%";
     bar.setAttribute("aria-label", prettyTime(chunk.start_time) + " - " + durationLabel(chunk.duration) + ". Drag anywhere on the bar to seek.");
     chunksLayer.append(bar);
     cursor = Math.max(cursor, chunkEnd);
@@ -1177,8 +1180,53 @@ document.querySelectorAll(".jump-recordings").forEach(function(button) {
   };
 });
 
+const cleanupDate = el("#cleanup-date");
+const cleanupScope = el("#cleanup-scope");
+const cleanupPreview = el("#cleanup-preview");
+const cleanupConfirm = el("#cleanup-confirm");
+const cleanupSubmit = el("#cleanup-submit");
+function cleanupRange() {
+  if (!cleanupDate || !cleanupDate.value) return null;
+  const selected = new Date(cleanupDate.value + "T00:00:00");
+  let start = new Date(selected), end = new Date(selected);
+  if (cleanupScope.value === "week") {
+    const day = (selected.getDay() + 6) % 7;
+    start.setDate(selected.getDate() - day); end = new Date(start); end.setDate(start.getDate() + 7);
+  } else if (cleanupScope.value === "month") {
+    start = new Date(selected.getFullYear(), selected.getMonth(), 1);
+    end = new Date(selected.getFullYear(), selected.getMonth() + 1, 1);
+  } else end.setDate(selected.getDate() + 1);
+  return {start: start, end: end};
+}
+function updateCleanupPreview() {
+  const range = cleanupRange();
+  if (!range) { cleanupPreview.textContent = "Choose a date to preview the deletion range."; cleanupSubmit.disabled = true; return; }
+  cleanupPreview.textContent = "This will delete completed recordings from " + range.start.toLocaleString() + " through " + range.end.toLocaleString() + ". Active recordings are protected.";
+  cleanupSubmit.disabled = !cleanupConfirm.checked;
+}
+if (cleanupDate) {
+  cleanupDate.value = timelineDate;
+  cleanupDate.oninput = updateCleanupPreview;
+  cleanupScope.onchange = updateCleanupPreview;
+  cleanupConfirm.onchange = updateCleanupPreview;
+  el("#cleanup-form").onsubmit = async function(event) {
+    event.preventDefault();
+    const range = cleanupRange();
+    if (!range || !cleanupConfirm.checked || !confirm("Permanently delete recordings in the selected range?")) return;
+    const result = el("#cleanup-result");
+    result.textContent = "Deleting recordings…";
+    try {
+      const response = await request("/recordings/delete-range", {method: "POST", body: JSON.stringify({start: range.start.toISOString(), end: range.end.toISOString()})});
+      result.textContent = "Deleted " + response.deleted + " recording(s) and freed " + formatBytes(response.bytes_deleted) + ".";
+      cleanupConfirm.checked = false; updateCleanupPreview();
+      loadRecordings();
+    } catch (error) { result.textContent = error.message; }
+  };
+  updateCleanupPreview();
+}
+
 const initialTab = location.hash.slice(1);
-activateTab(["overview", "monitor", "cameras", "recordings", "settings"].includes(initialTab) ? initialTab : "overview");
+activateTab(["overview", "monitor", "cameras", "recordings", "cleanup", "settings"].includes(initialTab) ? initialTab : "overview");
 
 el("#save-api").onclick = function() {
   api = apiInput.value.replace(/\/$/, "");

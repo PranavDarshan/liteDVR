@@ -25,6 +25,15 @@ async def open_database(path: Path) -> aiosqlite.Connection:
     db = await aiosqlite.connect(path)
     db.row_factory = aiosqlite.Row
     await db.executescript(SCHEMA)
+    # A prior interrupted schema migration can leave the temporary legacy
+    # table behind after the replacement table was committed. Preserve that
+    # stale copy under an archive name so startup remains non-destructive.
+    stale_legacy = await (await db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='recordings_legacy'")) .fetchone()
+    recordings_table = await (await db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='recordings'")) .fetchone()
+    if stale_legacy and recordings_table:
+        await db.execute("ALTER TABLE recordings_legacy RENAME TO recordings_legacy_archive")
     monitor_sql_row = await (await db.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='monitors'")).fetchone()
     monitor_sql = monitor_sql_row[0] if monitor_sql_row else ""

@@ -16,6 +16,7 @@ class Config:
     default_segment_minutes: int = 180
     allowed_origins: tuple[str, ...] = field(default_factory=tuple)
     mock_mode: bool = False
+    disable_recorders: bool = False
 
     def __post_init__(self) -> None:
         if self.retention_days not in (30, 60, 90):
@@ -42,4 +43,5 @@ def load_config(path: str | Path = "/etc/litedvr/config.toml") -> Config:
         retention_days=int(env.get("LITEDVR_RETENTION_DAYS", storage.get("retention_days", 30))),
         default_segment_minutes=int(env.get("LITEDVR_DEFAULT_SEGMENT_MINUTES", recorder.get("default_segment_minutes", 180))),
         allowed_origins=tuple(origins.split(",") if origins else cors.get("allowed_origins", [])),
-        mock_mode=env.get("LITEDVR_MOCK_MODE", str(recorder.get("mock_mode", False))).lower() == "true")
+        mock_mode=env.get("LITEDVR_MOCK_MODE", str(recorder.get("mock_mode", False))).lower() == "true",
+        disable_recorders=env.get("LITEDVR_DISABLE_RECORDERS", str(recorder.get("disable_recorders", False))).lower() == "true")

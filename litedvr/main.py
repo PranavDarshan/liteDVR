@@ -444,6 +444,34 @@ async def delete_recording(request: web.Request) -> web.Response:
     await request.app["db"].commit()
     return web.Response(status=204)
 
+async def delete_recording_range(request: web.Request) -> web.Response:
+    payload = await read_json(request)
+    start_value, end_value = payload.get("start"), payload.get("end")
+    if not isinstance(start_value, str) or not isinstance(end_value, str):
+        raise web.HTTPBadRequest(text="start and end ISO timestamps are required")
+    try:
+        start, end = parse_timestamp(start_value), parse_timestamp(end_value)
+    except web.HTTPException:
+        raise
+    if end <= start:
+        raise web.HTTPBadRequest(text="end must be after start")
+    rows = await (await request.app["db"].execute(
+        "SELECT * FROM recordings WHERE start_time < ? AND (end_time > ? OR end_time IS NULL) AND status <> 'RECORDING'",
+        (end.isoformat(), start.isoformat()))).fetchall()
+    deleted, bytes_deleted = 0, 0
+    for row in rows:
+        path = known_recording_path(request, row)
+        try:
+            size = path.stat().st_size
+            path.unlink()
+        except OSError as exc:
+            raise web.HTTPInternalServerError(text="could not delete a recording file") from exc
+        await request.app["db"].execute("DELETE FROM recordings WHERE id=?", (row["id"],))
+        deleted += 1
+        bytes_deleted += size
+    await request.app["db"].commit()
+    return web.json_response({"deleted": deleted, "bytes_deleted": bytes_deleted})
+
 @web.middleware
 async def cors(request: web.Request, handler):
     origin = request.headers.get("Origin")
@@ -469,7 +497,10 @@ async def database_context(app: web.Application):
     cfg.recordings_path.mkdir(parents=True, exist_ok=True)
     app["recorder_manager"] = RecorderManager(app["db"], cfg)
     app["live_manager"] = LiveStreamManager(app["recorder_manager"])
-    await app["recorder_manager"].start()
+    if cfg.disable_recorders:
+        logging.getLogger(__name__).info("Recorder workers disabled; serving existing recordings only")
+    else:
+        await app["recorder_manager"].start()
     yield
     await app["live_manager"].stop_all()
     await app["recorder_manager"].stop()
@@ -500,6 +531,7 @@ def create_app(config_path: str | None = None) -> web.Application:
     app.router.add_get("/api/recordings/{id}/playback", recording_playback_websocket)
     app.router.add_get("/api/recordings/{id}/download", download_recording)
     app.router.add_delete("/api/recordings/{id}", delete_recording)
+    app.router.add_post("/api/recordings/delete-range", delete_recording_range)
     app.router.add_route("OPTIONS", "/api/{tail:.*}", health)
     return app
 
