@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse
 import asyncio
+from fnmatch import fnmatchcase
 import json
 import logging
 import shutil
@@ -446,7 +447,8 @@ async def delete_recording(request: web.Request) -> web.Response:
 @web.middleware
 async def cors(request: web.Request, handler):
     origin = request.headers.get("Origin")
-    allowed = origin and origin in request.app["config"].allowed_origins
+    patterns = request.app["config"].allowed_origins
+    allowed = bool(origin and any(fnmatchcase(origin, pattern.strip()) for pattern in patterns))
     if request.method == "OPTIONS" and allowed:
         response = web.Response(status=204)
     else:
