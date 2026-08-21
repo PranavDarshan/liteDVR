@@ -4,8 +4,10 @@ import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import logging
+import os
 from pathlib import Path
 import re
+import signal
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from .config import Config
@@ -60,10 +62,32 @@ class Recorder:
 
     async def stop(self) -> None:
         self._stopping = True
-        if self._process and self._process.returncode is None:
-            self._process.terminate()
+        await self._stop_process()
         if self._task:
             await self._task
+
+    async def _stop_process(self) -> None:
+        process = self._process
+        if not process or process.returncode is not None:
+            return
+        try:
+            if os.name == "posix" and process.pid:
+                # FFmpeg owns the process group; stop all of its descendants.
+                os.killpg(process.pid, signal.SIGTERM)
+            else:
+                process.terminate()
+            await asyncio.wait_for(process.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            try:
+                if os.name == "posix" and process.pid:
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:
+                    process.kill()
+            except (ProcessLookupError, OSError):
+                pass
+            await process.wait()
+        except (ProcessLookupError, OSError):
+            pass
 
     async def live_subscribe(self, websocket) -> None:
         self._live_clients.add(websocket)
@@ -144,7 +168,10 @@ class Recorder:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 record_id = await self._record_start(started, path)
                 LOG.info("FFmpeg started for monitor %s", self.monitor.id)
-                self._process = await asyncio.create_subprocess_exec(*self._command(path, duration_seconds=segment_duration), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                spawn_options = {"stdout": asyncio.subprocess.PIPE, "stderr": asyncio.subprocess.PIPE}
+                if os.name == "posix":
+                    spawn_options["start_new_session"] = True
+                self._process = await asyncio.create_subprocess_exec(*self._command(path, duration_seconds=segment_duration), **spawn_options)
                 self.status = "RECORDING"
                 self._live_task = asyncio.create_task(self._pump_live(self._process.stdout))
                 stderr_task = asyncio.create_task(self._process.stderr.read())
@@ -155,8 +182,7 @@ class Recorder:
                 if self._process.returncode and b"not currently supported in container" in stderr:
                     LOG.warning("Monitor %s audio is incompatible with MP4 packet copy; retrying video-only", self.monitor.id)
                     self._process = await asyncio.create_subprocess_exec(
-                        *self._command(path, include_audio=False, duration_seconds=segment_duration),
-                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                        *self._command(path, include_audio=False, duration_seconds=segment_duration), **spawn_options)
                     self._live_task = asyncio.create_task(self._pump_live(self._process.stdout))
                     stderr_task = asyncio.create_task(self._process.stderr.read())
                     await self._process.wait()

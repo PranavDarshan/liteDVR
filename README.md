@@ -11,6 +11,10 @@ Copy `.env.example` to `.env`, set `LITEDVR_DATA_DIR` to a directory with enough
     docker compose build
     docker compose up -d
 
+On Debian systems without the Compose V2 plugin, install `docker-compose` and
+run the same commands with a hyphen (`docker-compose build`,
+`docker-compose up -d`).
+
 Open `http://<debian-host>:8081`. The backend is on port 8080 and the frontend on port 8081. The database and MP4 files are persisted under `LITEDVR_DATA_DIR`; do not remove that directory during upgrades.
 
 The default deployment target is `linux/386` for the requested 32-bit Debian laptop. If the host is amd64 or arm64, set `LITEDVR_PLATFORM` in `.env` to that platform before building. Docker itself must be available on the Debian host; a 32-bit userspace cannot run a 64-bit-only Docker engine.
