@@ -171,7 +171,11 @@ class Recorder:
                 spawn_options = {"stdout": asyncio.subprocess.PIPE, "stderr": asyncio.subprocess.PIPE}
                 if os.name == "posix":
                     spawn_options["start_new_session"] = True
-                self._process = await asyncio.create_subprocess_exec(*self._command(path, duration_seconds=segment_duration), **spawn_options)
+                # Start video-only by default. Some cameras expose an audio
+                # codec that cannot be packet-copied into MP4; attempting it
+                # first causes a restart and a visible recording gap.
+                self._process = await asyncio.create_subprocess_exec(
+                    *self._command(path, include_audio=False, duration_seconds=segment_duration), **spawn_options)
                 self.status = "RECORDING"
                 self._live_task = asyncio.create_task(self._pump_live(self._process.stdout))
                 stderr_task = asyncio.create_task(self._process.stderr.read())
