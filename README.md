@@ -4,6 +4,27 @@ LiteDVR is a small self-hosted DVR for low-resource Debian hosts. It records RTS
 
 The project includes TOML/environment configuration, SQLite metadata, CRUD camera/group management, supervised per-camera recording, retention cleanup, HTTP Range MP4 playback, isolated live/playback sockets, and a detached frontend.
 
+## How the recorder works
+
+Each enabled camera has one persistent FFmpeg ingest. It keeps the RTSP
+connection open while a segment muxer writes native-resolution, packet-copied
+MP4 files in three-hour cuts. Live viewers receive an isolated MJPEG WebSocket
+subscription from the same camera pipeline; closing a viewer does not stop
+recording or create another camera connection. Playback and downloads are
+served by the backend from stored MP4 files, never directly from the camera.
+
+```mermaid
+flowchart LR
+    C[RTSP camera] --> F[Persistent FFmpeg ingest]
+    F --> S[3-hour MP4 segmenter]
+    S --> D[(Recordings directory)]
+    S --> M[(SQLite metadata)]
+    F --> P[Per-camera MJPEG publisher]
+    P --> W[Isolated live WebSockets]
+    D --> H[HTTP Range playback/download]
+    H --> B[Browser]
+```
+
 ## Screenshots
 
 The web interface includes camera configuration, live monitoring, recording
@@ -116,6 +137,11 @@ Pull both images explicitly when preparing a host:
 The Compose file starts both images together and exposes the frontend on
 port `8081` and the backend API on port `8080`.
 
+New segmented recordings are stored below
+`<data-directory>/recordings/<group>/<camera>/segments`. Existing recordings
+are preserved during upgrades; the database and recordings directory are
+never part of a Docker image.
+
 Compose is the recommended service manager for the container deployment. Both
 services use `restart: unless-stopped`, so Docker restarts them after a crash
 and starts them again when the Docker daemon starts after a reboot:
@@ -142,7 +168,7 @@ The default deployment target is `linux/386` for the requested 32-bit Debian lap
 
 For a no-Docker local test on Windows, use config.local-test.toml and run the backend on port 8080 plus a static server for frontend on port 8081. The configuration UI lets you add groups and RTSP cameras; start with a disabled camera or a known RTSP endpoint.
 
-The detached frontend includes a recordings view with filters, a metadata-based timeline, standard HTML5 MP4 playback, seeking through Range requests, and download links. It intentionally does not provide a live RTSP view.
+The detached frontend includes a recordings view with filters, a metadata-based timeline, standard HTML5 MP4 playback, seeking through Range requests, download links, and isolated live camera subscriptions. It never connects directly to an RTSP camera.
 
 Maintainers can publish updated images from a build machine with:
 

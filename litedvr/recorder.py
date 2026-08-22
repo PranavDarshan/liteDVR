@@ -144,10 +144,112 @@ class Recorder:
                 str(max(1, duration)), "-movflags",
                 "+frag_keyframe+empty_moov+default_base_moof+separate_moof",
                 "-frag_duration", "1000000", "-flush_packets", "1", "-y", str(output),
+                # The preview pipe is a second FFmpeg output.  Apply the same
+                # segment duration to it; otherwise it remains open forever
+                # after the MP4 reaches the 3-hour boundary and prevents the
+                # recorder from starting the next segment.
+                "-map", "0:v:0", "-t", str(max(1, duration)), "-an", "-vf", "fps=5", "-c:v", "mjpeg", "-q:v", "6",
+                "-f", "mjpeg", "pipe:1"]
+
+    def _persistent_command(self, output_dir: Path) -> list[str]:
+        """Run one long-lived ingest and let FFmpeg rotate MP4 segments.
+
+        The segment muxer owns rotation; the RTSP input is opened only once.
+        Live JPEG frames are a second output and are published independently
+        by ``_pump_live``.
+        """
+        source = rtsp_with_credentials(self.monitor.rtsp_url, self.monitor.username, self.monitor.password)
+        pattern = str(output_dir / "%Y-%m-%dT%H-%M-%S.mp4")
+        return [self.config.ffmpeg_path, "-hide_banner", "-loglevel", "warning",
+                "-err_detect", "ignore_err", "-fflags", "+discardcorrupt",
+                "-rtsp_transport", "tcp", "-i", source,
+                "-map", "0:v:0", "-c", "copy", "-f", "segment",
+                "-segment_time", str(self.monitor.segment_minutes * 60),
+                "-segment_atclocktime", "1", "-reset_timestamps", "1",
+                "-strftime", "1", "-segment_format", "mp4",
+                "-segment_format_options", "movflags=+frag_keyframe+empty_moov+default_base_moof+separate_moof",
+                "-y", pattern,
                 "-map", "0:v:0", "-an", "-vf", "fps=5", "-c:v", "mjpeg", "-q:v", "6",
                 "-f", "mjpeg", "pipe:1"]
 
+    async def _sync_persistent_segments(self, directory: Path, active: bool) -> None:
+        """Index files emitted by the segment muxer without touching old rows."""
+        files = sorted(directory.glob("*.mp4"))
+        if not files:
+            return
+        current = files[-1] if active else None
+        for path in files:
+            try:
+                started = datetime.strptime(path.stem, "%Y-%m-%dT%H-%M-%S").replace(tzinfo=UTC)
+                size = path.stat().st_size
+            except (ValueError, OSError):
+                continue
+            row = await (await self.db.execute("SELECT id FROM recordings WHERE file_path=?", (str(path),))).fetchone()
+            now = datetime.now(UTC)
+            is_active = current == path
+            status = "RECORDING" if is_active else "COMPLETE"
+            end = now if is_active else datetime.fromtimestamp(path.stat().st_mtime, UTC)
+            duration = max(0.0, (end - started).total_seconds())
+            if row:
+                await self.db.execute(
+                    "UPDATE recordings SET end_time=?,duration=?,file_size=?,status=? WHERE id=?",
+                    (end.isoformat(), duration, size, status, row["id"]),
+                )
+            else:
+                await self.db.execute(
+                    "INSERT INTO recordings (monitor_id,monitor_name,group_name,start_time,end_time,duration,file_path,file_size,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (self.monitor.id, self.monitor.name, self.monitor.group_name, started.isoformat(),
+                     end.isoformat(), duration, str(path), size, status, started.isoformat()),
+                )
+        await self.db.commit()
+
+    async def _run_persistent(self) -> None:
+        directory = self.config.recordings_path / safe_part(self.monitor.group_name) / safe_part(self.monitor.name) / "segments"
+        directory.mkdir(parents=True, exist_ok=True)
+        spawn_options = {"stdout": asyncio.subprocess.PIPE, "stderr": asyncio.subprocess.PIPE}
+        if os.name == "posix":
+            spawn_options["start_new_session"] = True
+        delay = 5
+        while not self._stopping:
+            try:
+                self.status = "CONNECTING"
+                self._process = await asyncio.create_subprocess_exec(*self._persistent_command(directory), **spawn_options)
+                self.status = "RECORDING"
+                self._live_task = asyncio.create_task(self._pump_live(self._process.stdout))
+                stderr_task = asyncio.create_task(self._process.stderr.read())
+                while self._process.returncode is None and not self._stopping:
+                    await self._sync_persistent_segments(directory, active=True)
+                    await asyncio.sleep(2)
+                await self._process.wait()
+                if self._live_task:
+                    await self._live_task
+                stderr = await stderr_task
+                await self._sync_persistent_segments(directory, active=False)
+                if self._process.returncode not in (0, None):
+                    latest = sorted(directory.glob("*.mp4"))[-1:] 
+                    if latest:
+                        await self.db.execute("UPDATE recordings SET status='INTERRUPTED' WHERE file_path=?", (str(latest[0]),))
+                        await self.db.commit()
+                if self._process.returncode == 0 and self._stopping:
+                    break
+                diagnostic = redact_rtsp_credentials(stderr.decode(errors="replace")[-2000:]).strip()
+                LOG.warning("Persistent FFmpeg stopped for monitor %s: code=%s %s", self.monitor.id, self._process.returncode, diagnostic)
+            except Exception:
+                LOG.exception("Recorder failure for monitor %s", self.monitor.id)
+            finally:
+                if self._live_task and not self._live_task.done():
+                    self._live_task.cancel()
+                self._live_task = None
+                self._process = None
+            self.status = "OFFLINE"
+            if not self._stopping:
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 30)
+
     async def _run(self) -> None:
+        if not self.config.mock_mode:
+            await self._run_persistent()
+            return
         delay = 5
         while not self._stopping:
             if not (self.monitor.enabled and self.monitor.recording_enabled):

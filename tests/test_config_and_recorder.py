@@ -36,6 +36,9 @@ def test_normal_recorder_is_packet_copy_only():
     assert command[command.index("-c") + 1] == "copy"
     assert command[command.index("-map") + 1] == "0:v:0"
     assert "0:a?" in command
+    # Both outputs (MP4 and preview pipe) must stop at the segment boundary.
+    assert command.count("-t") == 2
+    assert command[command.index("-t") + 1] == command[command.index("-t", command.index("-t") + 1) + 1]
 
 def test_recorder_can_fall_back_to_video_only_for_incompatible_audio():
     recorder = Recorder(None, Config(), Monitor(1, "Home", "Door", "rtsp://camera/live",
@@ -43,3 +46,13 @@ def test_recorder_can_fall_back_to_video_only_for_incompatible_audio():
     command = recorder._command(Path("/tmp/output.mp4"), include_audio=False)
     assert "0:a?" not in command
     assert command[command.index("-c") + 1] == "copy"
+
+def test_persistent_ingest_uses_segment_muxer_and_single_rtsp_input(tmp_path):
+    recorder = Recorder(None, Config(recordings_path=tmp_path), Monitor(1, "Home", "Door", "rtsp://camera/live",
+        "user", "pass", True, True, 180))
+    command = recorder._persistent_command(tmp_path)
+    assert command.count("-i") == 1
+    assert command[command.index("-f") + 1] == "segment"
+    assert command[command.index("-segment_time") + 1] == "10800"
+    assert "-segment_atclocktime" in command
+    assert command[-1] == "pipe:1"
