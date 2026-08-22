@@ -177,13 +177,22 @@ function buildDayWindows(items) {
     return a.start_time.localeCompare(b.start_time);
   }).forEach(function(recording) {
     const bounds = recordingBounds(recording);
-    const index = Math.max(0, Math.min(7, Math.floor((bounds.start - start) / windowSizeMs)));
-    const item = Object.assign({}, recording, {
-      window_index: index,
-      window_offset_seconds: Math.max(0, (bounds.start - windows[index].start) / 1000),
-      window_end_offset_seconds: Math.max(0, (bounds.end - windows[index].start) / 1000)
+    // A file can straddle a local 3-hour boundary (for example, a UTC
+    // segment at 14:30 IST crosses the 15:00 UI boundary). Keep the original
+    // recording for playback, but add a clipped visual copy to every window
+    // it overlaps so neither window incorrectly appears empty.
+    windows.forEach(function(window) {
+      const clipStart = Math.max(bounds.start, window.start);
+      const clipEnd = Math.min(bounds.end, window.end);
+      if (clipEnd <= clipStart) return;
+      windows[window.index].chunks.push(Object.assign({}, recording, {
+        window_index: window.index,
+        window_offset_seconds: Math.max(0, (clipStart - bounds.start) / 1000),
+        window_end_offset_seconds: Math.max(0, (clipEnd - bounds.start) / 1000),
+        window_visual_start: clipStart,
+        window_visual_end: clipEnd
+      }));
     });
-    windows[index].chunks.push(item);
   });
   return windows;
 }
@@ -221,7 +230,7 @@ function chooseWindow(index, autoplay) {
       : "This 3 hour block has no recorded chunks.";
     return;
   }
-  showPlayback(playable[0], playable, 0, autoplay === true);
+  showPlayback(playable[0], playable, playable[0].window_offset_seconds || 0, autoplay === true);
   openRecordingSocket(playable[0]);
   if (autoplay) {
     el("#player").play().catch(function() {});
@@ -252,8 +261,8 @@ function renderDayTimeline(windows) {
     window.chunks.slice().sort(function(a, b) {
       return a.start_time.localeCompare(b.start_time);
     }).forEach(function(chunk) {
-      const startPercent = Math.max(0, (new Date(chunk.start_time).getTime() - window.start) / (3 * 3600 * 1000) * 100);
-      const endPercent = Math.max(0, (new Date(chunk.end_time || chunk.start_time).getTime() - window.start) / (3 * 3600 * 1000) * 100);
+      const startPercent = Math.max(0, (((chunk.window_visual_start != null ? chunk.window_visual_start : new Date(chunk.start_time).getTime()) - window.start) / (3 * 3600 * 1000)) * 100);
+      const endPercent = Math.max(0, (((chunk.window_visual_end != null ? chunk.window_visual_end : new Date(chunk.end_time || chunk.start_time).getTime()) - window.start) / (3 * 3600 * 1000)) * 100);
       if (startPercent > cursor) fills.push("#373c3a " + cursor + "% " + startPercent + "%");
       fills.push("#a6c98c " + startPercent + "% " + endPercent + "%");
       cursor = Math.max(cursor, endPercent);
@@ -309,8 +318,10 @@ function renderSegmentTimeline(window) {
   window.chunks.filter(isPlayable).slice().sort(function(a, b) {
     return a.start_time.localeCompare(b.start_time);
   }).forEach(function(chunk) {
-    const chunkStart = Math.max(0, Math.min(100, (new Date(chunk.start_time).getTime() - start) / windowMs * 100));
-    const chunkEnd = Math.max(chunkStart, Math.min(100, (new Date(chunk.end_time || chunk.start_time).getTime() - start) / windowMs * 100));
+    const visualStart = chunk.window_visual_start != null ? chunk.window_visual_start : new Date(chunk.start_time).getTime();
+    const visualEnd = chunk.window_visual_end != null ? chunk.window_visual_end : new Date(chunk.end_time || chunk.start_time).getTime();
+    const chunkStart = Math.max(0, Math.min(100, (visualStart - start) / windowMs * 100));
+    const chunkEnd = Math.max(chunkStart, Math.min(100, (visualEnd - start) / windowMs * 100));
     if (chunkStart > cursor) {
       gaps.push({left: cursor, width: chunkStart - cursor});
     }
