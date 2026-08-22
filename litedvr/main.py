@@ -279,7 +279,11 @@ async def list_recordings(request: web.Request) -> web.Response:
         # lexical format; mixing `T` with SQLite's space-separated datetime
         # format incorrectly includes records from the following day.
         clauses[-1] = "r.start_time >= ? AND r.start_time < ?"
-        params.extend([day.strftime("%Y-%m-%dT00:00:00"), (day + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00")])
+        # Preserve the timezone-adjusted hour. Formatting the date as a fixed
+        # 00:00 value would shift negative offsets (such as IST -330) back to
+        # the wrong UTC day and hide early-morning recordings.
+        params.extend([day.strftime("%Y-%m-%dT%H:%M:%S"),
+                       (day + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")])
     if "start" in q:
         clauses.append("r.start_time >= ?"); params.append(q["start"])
     if "end" in q:
