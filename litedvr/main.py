@@ -271,7 +271,9 @@ async def list_recordings(request: web.Request) -> web.Response:
         except ValueError: raise web.HTTPBadRequest(text="date must be YYYY-MM-DD")
         try: tz_offset = int(q.get("tz_offset_minutes", "0"))
         except ValueError: raise web.HTTPBadRequest(text="tz_offset_minutes must be an integer")
-        day = day - timedelta(minutes=tz_offset)
+        # JavaScript's getTimezoneOffset() is UTC minus local time. Convert
+        # the browser's local midnight to the corresponding UTC instant.
+        day = day + timedelta(minutes=tz_offset)
         clauses.append("r.start_time >= ? AND r.start_time < datetime(?, '+1 day')")
         # Stored timestamps are ISO-8601 strings. Keep both bounds in the same
         # lexical format; mixing `T` with SQLite's space-separated datetime
@@ -314,7 +316,9 @@ async def timeline(request: web.Request) -> web.Response:
     except ValueError as exc:
         raise web.HTTPBadRequest(text="date must be YYYY-MM-DD") from exc
     try:
-        day -= timedelta(minutes=int(request.query.get("tz_offset_minutes", "0")))
+        # JavaScript's getTimezoneOffset() is UTC minus local time. Convert
+        # the browser's local midnight to the corresponding UTC instant.
+        day += timedelta(minutes=int(request.query.get("tz_offset_minutes", "0")))
     except ValueError as exc:
         raise web.HTTPBadRequest(text="tz_offset_minutes must be an integer") from exc
     next_day = day + timedelta(days=1)
