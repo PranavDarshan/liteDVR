@@ -193,8 +193,16 @@ class Recorder:
                     await self._process.wait()
                     await self._live_task
                     stderr = await stderr_task
-                okay = self._process.returncode == 0
                 elapsed = (datetime.now(UTC) - process_started).total_seconds()
+                # FFmpeg can exit with code 0 after an RTSP demuxer failure
+                # (for example a CSeq mismatch/corrupt H.264 payload). Only
+                # treat code 0 as a completed segment when it ran to the
+                # fixed boundary; short exits must be retried as interruptions.
+                reached_boundary = segment_duration < 30 or elapsed >= segment_duration - 10
+                okay = self._process.returncode == 0 and (reached_boundary or self._stopping)
+                if self._process.returncode == 0 and not reached_boundary and not self._stopping:
+                    LOG.warning("FFmpeg ended early for monitor %s: elapsed=%.1fs expected=%.1fs; retrying",
+                                self.monitor.id, elapsed, segment_duration)
                 diagnostic = redact_rtsp_credentials(stderr.decode(errors="replace")[-2000:]).strip()
                 LOG.info("FFmpeg exited for monitor %s: code=%s elapsed=%.1fs", self.monitor.id, self._process.returncode, elapsed)
                 if diagnostic:

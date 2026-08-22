@@ -43,6 +43,22 @@ function closeRecordingSocket() {
   recordingSocketId = null;
 }
 
+function resetPlayback() {
+  closeRecordingSocket();
+  const player = el("#player");
+  if (player) {
+    player.pause();
+    player.removeAttribute("src");
+    player.load();
+  }
+  const section = el("#playback-section");
+  if (section) section.hidden = true;
+  currentRecording = null;
+  currentWindow = null;
+  playbackQueue = [];
+  playbackIndex = 0;
+}
+
 function openRecordingSocket(recording) {
   closeRecordingSocket();
   if (!recording || !recording.id) return;
@@ -881,7 +897,9 @@ function renderDayTimelineLegacy(items) {
 
 async function loadRecordings() {
   try {
-    closeRecordingSocket();
+    // A camera/date filter change invalidates the open player. Otherwise the
+    // previous camera's player can remain visible beside the new timeline.
+    resetPlayback();
     const params = new URLSearchParams({limit: "500", sort: el("#recording-sort").value});
     if (archiveSource) {
       params.set("group_name", archiveSource.group_name);
@@ -1323,10 +1341,7 @@ el("#next-day").onclick = function() {
 };
 
 el("#close-player").onclick = function() {
-  closeRecordingSocket();
-  el("#player").pause();
-  el("#player").removeAttribute("src");
-  el("#playback-section").hidden = true;
+  resetPlayback();
 };
 
 el("#player").onplay = function() {
