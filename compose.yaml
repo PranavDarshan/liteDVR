@@ -13,7 +13,7 @@ services:
       LITEDVR_DATABASE_PATH: "/var/lib/litedvr/litedvr.sqlite3"
       LITEDVR_RECORDINGS_PATH: "/var/lib/litedvr/recordings"
       LITEDVR_DEFAULT_SEGMENT_MINUTES: "180"
-      LITEDVR_ALLOWED_ORIGINS: "http://localhost:8081,http://127.0.0.1:8081,http://192.168.*"
+      LITEDVR_ALLOWED_ORIGINS: "http://localhost:*,http://127.0.0.1:*,http://192.168.*"
     volumes:
       # Keep the Docker runtime on the same database and recordings used by
       # the local test setup. This prevents the named volume from appearing

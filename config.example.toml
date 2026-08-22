@@ -14,4 +14,4 @@ default_segment_minutes = 180
 mock_mode = false
 
 [cors]
-allowed_origins = ["http://192.168.1.10:5173"]
+allowed_origins = ["http://localhost:*", "http://127.0.0.1:*", "http://192.168.*"]

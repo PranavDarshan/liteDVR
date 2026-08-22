@@ -522,7 +522,19 @@ function renderMonitorWall() {
       socket.binaryType = "blob";
       tile._liveSocket = socket;
       liveSockets.add(socket);
+      const connectTimer = setTimeout(function() {
+        if (socket.readyState === WebSocket.CONNECTING) {
+          status.textContent = "LIVE TIMEOUT";
+          status.className = "status OFFLINE";
+          try { socket.close(4008, "live connection timeout"); } catch (_) {}
+        }
+      }, 8000);
+      socket.onopen = function() {
+        status.textContent = "CONNECTED / WAITING";
+        status.className = "status CONNECTING";
+      };
       socket.onmessage = function(event) {
+        clearTimeout(connectTimer);
         if (tile._liveObjectUrl) URL.revokeObjectURL(tile._liveObjectUrl);
         tile._liveObjectUrl = URL.createObjectURL(event.data);
         image.src = tile._liveObjectUrl;
@@ -532,8 +544,14 @@ function renderMonitorWall() {
         status.textContent = "LIVE";
         status.className = "status RECORDING";
       };
-      socket.onerror = function() { socket.close(); };
+      socket.onerror = function() {
+        clearTimeout(connectTimer);
+        status.textContent = "LIVE ERROR";
+        status.className = "status OFFLINE";
+        socket.close();
+      };
       socket.onclose = function() {
+        clearTimeout(connectTimer);
         liveSockets.delete(socket);
         if (tile.isConnected) {
           status.textContent = "LIVE UNAVAILABLE";
