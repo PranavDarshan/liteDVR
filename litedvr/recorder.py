@@ -15,6 +15,7 @@ from .config import Config
 LOG = logging.getLogger(__name__)
 SAFE_PART = re.compile(r"[^A-Za-z0-9._-]+")
 RTSP_CREDENTIALS = re.compile(r"(rtsp(?:s)?://)[^@\s]+@", re.IGNORECASE)
+MAX_SEGMENT_SECONDS = 3 * 60 * 60
 
 def safe_part(value: str) -> str:
     return SAFE_PART.sub("-", value.strip()).strip(".-")[:80] or "unnamed"
@@ -336,6 +337,38 @@ class RecorderManager:
         self.recorders: dict[int, Recorder] = {}
 
     async def start(self) -> None:
+        # A process restart can leave database rows marked RECORDING even
+        # though their FFmpeg process no longer exists. If these rows remain
+        # active, the recordings UI may select an old multi-hour row instead
+        # of the current 3-hour segment. Mark them interrupted (or ERROR when
+        # their duration is impossibly over 3 hours); the persistent segment indexer below will immediately promote the
+        # actually active segment back to RECORDING.
+        now = datetime.now(UTC).isoformat()
+        stale = await (await self.db.execute(
+            "SELECT COUNT(*) AS n FROM recordings WHERE status='RECORDING'"
+        )).fetchone()
+        if stale and stale["n"]:
+            await self.db.execute(
+                "UPDATE recordings SET status=CASE WHEN duration > ? THEN 'ERROR' ELSE 'INTERRUPTED' END, "
+                "end_time=COALESCE(end_time, ?) "
+                "WHERE status='RECORDING'", (MAX_SEGMENT_SECONDS, now)
+            )
+            await self.db.commit()
+            LOG.warning("Reconciled %s stale recording row(s) after startup", stale["n"])
+        # Older recorder versions could persist a completed row spanning many
+        # hours. It is not a valid fixed-size segment and causes the timeline
+        # to paint a morning file across unrelated evening windows.
+        invalid = await (await self.db.execute(
+            "SELECT COUNT(*) AS n FROM recordings WHERE duration > ? AND status <> 'ERROR'",
+            (MAX_SEGMENT_SECONDS,),
+        )).fetchone()
+        if invalid and invalid["n"]:
+            await self.db.execute(
+                "UPDATE recordings SET status='ERROR' WHERE duration > ? AND status <> 'ERROR'",
+                (MAX_SEGMENT_SECONDS,),
+            )
+            await self.db.commit()
+            LOG.warning("Quarantined %s recording row(s) longer than the 3-hour segment limit", invalid["n"])
         rows = await (await self.db.execute(
             """SELECT m.*, COALESCE(g.name, 'Ungrouped') AS group_name
                FROM monitors AS m LEFT JOIN monitor_groups AS g ON g.id=m.group_id

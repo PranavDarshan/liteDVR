@@ -12,7 +12,7 @@ from urllib.parse import urlsplit, urlunsplit
 from aiohttp import web
 from .config import load_config
 from .database import open_database
-from .recorder import RecorderManager, rtsp_with_credentials
+from .recorder import MAX_SEGMENT_SECONDS, RecorderManager, rtsp_with_credentials
 
 STARTED = time.monotonic()
 
@@ -257,7 +257,9 @@ async def recording_row(request: web.Request, recording_id: str):
 
 async def list_recordings(request: web.Request) -> web.Response:
     q = request.query
-    clauses, params = [], []
+    # Fixed-size recordings are never longer than three hours. Exclude legacy
+    # corrupt metadata at read time as well as during startup reconciliation.
+    clauses, params = ["(r.duration IS NULL OR r.duration <= ?)"], [MAX_SEGMENT_SECONDS]
     if "monitor_id" in q:
         clauses.append("r.monitor_id=?"); params.append(int(q["monitor_id"]))
     if "group_id" in q:
@@ -331,8 +333,10 @@ async def timeline(request: web.Request) -> web.Response:
            COALESCE(m.group_id,0) AS group_id,COALESCE(g.name,r.group_name,'Removed group') AS group_name
            FROM recordings r LEFT JOIN monitors m ON m.id=r.monitor_id
            LEFT JOIN monitor_groups g ON g.id=m.group_id
-           WHERE r.monitor_id=? AND r.start_time>=? AND r.start_time<? ORDER BY r.start_time""",
-        (monitor_id, day.isoformat(), next_day.isoformat()))).fetchall()
+           WHERE r.monitor_id=? AND r.start_time>=? AND r.start_time<?
+             AND (r.duration IS NULL OR r.duration <= ?)
+           ORDER BY r.start_time""",
+        (monitor_id, day.isoformat(), next_day.isoformat(), MAX_SEGMENT_SECONDS))).fetchall()
     now = datetime.now(UTC)
     items = []
     active_rows = [row for row in rows if row["status"] == "RECORDING" and not row["end_time"]]
@@ -362,8 +366,8 @@ async def resolve_timeline(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text="monitor_id and timestamp are required")
     timestamp = parse_timestamp(timestamp_value)
     row = await (await request.app["db"].execute(
-        "SELECT id,start_time,end_time FROM recordings WHERE monitor_id=? AND start_time<=? AND (end_time>? OR end_time IS NULL) ORDER BY start_time DESC LIMIT 1",
-        (monitor_id, timestamp.isoformat(), timestamp.isoformat()))).fetchone()
+        "SELECT id,start_time,end_time FROM recordings WHERE monitor_id=? AND start_time<=? AND (end_time>? OR end_time IS NULL) AND (duration IS NULL OR duration <= ?) ORDER BY start_time DESC LIMIT 1",
+        (monitor_id, timestamp.isoformat(), timestamp.isoformat(), MAX_SEGMENT_SECONDS))).fetchone()
     if not row:
         raise web.HTTPNotFound(text="no recording at timestamp")
     offset = max(0, (timestamp - parse_timestamp(row["start_time"])).total_seconds())

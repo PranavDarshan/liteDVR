@@ -4,7 +4,8 @@ import pytest
 from litedvr.config import Config
 from litedvr.config import load_config
 from litedvr.database import open_database
-from litedvr.recorder import Monitor, Recorder, safe_part, rtsp_with_credentials
+from litedvr.recorder import Monitor, Recorder, RecorderManager, safe_part, rtsp_with_credentials
+
 
 def test_defaults_match_specification():
     config = Config()
@@ -58,6 +59,26 @@ def test_persistent_ingest_uses_segment_muxer_and_single_rtsp_input(tmp_path):
     assert command[command.index("-segment_time") + 1] == "10800"
     assert "-segment_atclocktime" in command
     assert command[-1] == "pipe:1"
+
+def test_recorder_manager_reconciles_stale_rows(tmp_path, monkeypatch):
+    async def scenario():
+        db = await open_database(tmp_path / "mock.sqlite3")
+        await db.execute("INSERT INTO monitor_groups(id,name,created_at) VALUES (1,'Home','2026-08-22T00:00:00+00:00')")
+        await db.execute("INSERT INTO monitors(id,group_id,name,rtsp_url,enabled,recording_enabled,segment_minutes,created_at,updated_at) VALUES (1,1,'Door','rtsp://camera/live',1,1,180,'2026-08-22T00:00:00+00:00','2026-08-22T00:00:00+00:00')")
+        await db.execute("INSERT INTO recordings(monitor_id,monitor_name,group_name,start_time,duration,file_path,status,created_at) VALUES (1,'Door','Home','2026-08-22T00:00:00+00:00',7200,'/tmp/stale.mp4','RECORDING','2026-08-22T00:00:00+00:00')")
+        await db.execute("INSERT INTO recordings(monitor_id,monitor_name,group_name,start_time,duration,file_path,status,created_at) VALUES (1,'Door','Home','2026-08-22T08:00:00+00:00',45000,'/tmp/legacy-long.mp4','COMPLETE','2026-08-22T08:00:00+00:00')")
+        await db.commit()
+        monkeypatch.setattr(Recorder, "start", lambda self: None)
+        manager = RecorderManager(db, Config(recordings_path=tmp_path))
+        await manager.start()
+        row = await (await db.execute("SELECT status,end_time FROM recordings WHERE file_path='/tmp/stale.mp4'")).fetchone()
+        assert row["status"] == "INTERRUPTED"
+        assert row["end_time"]
+        row = await (await db.execute("SELECT status FROM recordings WHERE file_path='/tmp/legacy-long.mp4'")).fetchone()
+        assert row["status"] == "ERROR"
+        await db.close()
+
+    asyncio.run(scenario())
 
 def test_persistent_segment_index_tracks_active_then_complete(tmp_path):
     async def scenario():

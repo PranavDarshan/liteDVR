@@ -119,7 +119,9 @@ function formatUptime(seconds) {
 function isPlayable(recording) {
   // Fragmented MP4 files are playable while they are being written once the
   // initial headers/data exist. Avoid opening tiny files before that point.
-  return Boolean(recording) && recording.status !== "ERROR" && Number(recording.file_size) >= 65536;
+  // A legacy row longer than the fixed 3-hour segment limit is corrupt
+  // metadata, not a valid playable chunk.
+  return Boolean(recording) && recording.status !== "ERROR" && Number(recording.duration || 0) <= 10800 && Number(recording.file_size) >= 65536;
 }
 
 function sortPlayables(items) {
@@ -250,15 +252,16 @@ function renderDayTimeline(windows) {
   windows.forEach(function(window) {
     const button = document.createElement("button");
     button.type = "button";
-    const hasPlayable = window.chunks.some(isPlayable);
-    const hasActive = window.chunks.some(function(chunk) { return chunk.status === "RECORDING"; });
+    const validChunks = window.chunks.filter(function(chunk) { return chunk.status !== "ERROR"; });
+    const hasPlayable = validChunks.some(isPlayable);
+    const hasActive = validChunks.some(function(chunk) { return chunk.status === "RECORDING"; });
     button.className = "timeline-segment " + (hasPlayable ? "complete" : hasActive ? "active" : "error");
     button.style.left = (window.index * 12.5) + "%";
     button.style.width = "12.5%";
     button.setAttribute("aria-label", windowLabel(window.index) + " - " + String(Math.floor((window.index + 1) * 3)).padStart(2, "0") + ":00");
     const fills = [];
     let cursor = 0;
-    window.chunks.slice().sort(function(a, b) {
+    validChunks.slice().sort(function(a, b) {
       return a.start_time.localeCompare(b.start_time);
     }).forEach(function(chunk) {
       const startPercent = Math.max(0, (((chunk.window_visual_start != null ? chunk.window_visual_start : new Date(chunk.start_time).getTime()) - window.start) / (3 * 3600 * 1000)) * 100);
@@ -487,6 +490,7 @@ function renderMonitorWall() {
   const wall = el("#monitor-wall");
   wall.querySelectorAll(".monitor-tile").forEach(function(tile) {
     if (tile._liveSocket) tile._liveSocket.close();
+    if (tile._liveWatchdog) clearInterval(tile._liveWatchdog);
     if (tile._liveObjectUrl) URL.revokeObjectURL(tile._liveObjectUrl);
   });
   wall.replaceChildren();
@@ -522,6 +526,14 @@ function renderMonitorWall() {
       socket.binaryType = "blob";
       tile._liveSocket = socket;
       liveSockets.add(socket);
+      let lastFrameAt = Date.now();
+      tile._liveWatchdog = setInterval(function() {
+        if (socket.readyState === WebSocket.OPEN && Date.now() - lastFrameAt > 15000) {
+          status.textContent = "LIVE STALLED";
+          status.className = "status OFFLINE";
+          try { socket.close(4009, "no live frames"); } catch (_) {}
+        }
+      }, 5000);
       const connectTimer = setTimeout(function() {
         if (socket.readyState === WebSocket.CONNECTING) {
           status.textContent = "LIVE TIMEOUT";
@@ -535,6 +547,7 @@ function renderMonitorWall() {
       };
       socket.onmessage = function(event) {
         clearTimeout(connectTimer);
+        lastFrameAt = Date.now();
         if (tile._liveObjectUrl) URL.revokeObjectURL(tile._liveObjectUrl);
         tile._liveObjectUrl = URL.createObjectURL(event.data);
         image.src = tile._liveObjectUrl;
@@ -552,6 +565,10 @@ function renderMonitorWall() {
       };
       socket.onclose = function() {
         clearTimeout(connectTimer);
+        if (tile._liveWatchdog) {
+          clearInterval(tile._liveWatchdog);
+          tile._liveWatchdog = null;
+        }
         liveSockets.delete(socket);
         if (tile.isConnected) {
           status.textContent = "LIVE UNAVAILABLE";
