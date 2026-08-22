@@ -124,8 +124,15 @@ function isPlayable(recording) {
   return Boolean(recording) && recording.status !== "ERROR" && Number(recording.duration || 0) <= 10800 && Number(recording.file_size) >= 65536;
 }
 
+function isCurrentlyPlayable(recording) {
+  // Fragmented MP4 files can be opened before finalization. Keep the same
+  // duration guard, but permit an active file once it has emitted data.
+  return isPlayable(recording) || Boolean(recording && recording.status === "RECORDING" &&
+    Number(recording.duration || 0) <= 10800 && Number(recording.file_size) >= 1024);
+}
+
 function sortPlayables(items) {
-  return items.filter(isPlayable).slice().sort(function(a, b) {
+  return items.filter(isCurrentlyPlayable).slice().sort(function(a, b) {
     return a.start_time.localeCompare(b.start_time);
   });
 }
@@ -167,6 +174,13 @@ function windowStartMs(index) {
 
 function windowLabel(index) {
   return String(Math.floor(index * 3)).padStart(2, "0") + ":00";
+}
+
+function setPlaybackRangeLabel(index) {
+  const label = el("#playback-range-label");
+  if (!label || index == null || index < 0 || index > 7) return;
+  label.textContent = windowLabel(index) + " - " +
+    String(Math.floor((index + 1) * 3)).padStart(2, "0") + ":00";
 }
 
 function buildDayWindows(items) {
@@ -213,23 +227,28 @@ function chooseWindow(index, autoplay) {
   closeRecordingSocket();
   currentWindow = dayWindows[index] || null;
   if (!currentWindow) return;
-  const playable = currentWindow.chunks.filter(isPlayable).sort(function(a, b) {
+  const playable = currentWindow.chunks.filter(isCurrentlyPlayable).sort(function(a, b) {
     return a.start_time.localeCompare(b.start_time);
   });
   playbackQueue = playable;
   playbackIndex = 0;
   renderSegmentTimeline(currentWindow);
-  el("#playback-range-label").textContent = windowLabel(currentWindow.index) + " - " + String(Math.floor((currentWindow.index + 1) * 3)).padStart(2, "0") + ":00";
+  setPlaybackRangeLabel(currentWindow.index);
   if (!playable.length) {
-    if (currentWindow.chunks.length) openRecordingSocket(currentWindow.chunks[0]);
+    const activeChunk = currentWindow.chunks.find(function(chunk) {
+      return chunk.status === "RECORDING" && Number(chunk.duration || 0) <= 10800;
+    });
+    if (activeChunk) openRecordingSocket(activeChunk);
     const player = el("#player");
     player.pause();
     player.removeAttribute("src");
     player.load();
     el("#playback-section").hidden = true;
-    el("#timeline-status").textContent = currentWindow.chunks.length
-      ? "This 3 hour block is still recording; playback is available after the MP4 is finalized."
-      : "This 3 hour block has no recorded chunks.";
+    el("#timeline-status").textContent = activeChunk
+      ? "This recording is still initializing; playback will open when the MP4 header is available."
+      : currentWindow.chunks.length
+        ? "This 3 hour block has no playable recording chunks."
+        : "This 3 hour block has no recorded chunks.";
     return;
   }
   showPlayback(playable[0], playable, playable[0].window_offset_seconds || 0, autoplay === true);
@@ -254,7 +273,9 @@ function renderDayTimeline(windows) {
     button.type = "button";
     const validChunks = window.chunks.filter(function(chunk) { return chunk.status !== "ERROR"; });
     const hasPlayable = validChunks.some(isPlayable);
-    const hasActive = validChunks.some(function(chunk) { return chunk.status === "RECORDING"; });
+    const hasActive = validChunks.some(function(chunk) {
+      return chunk.status === "RECORDING" && Number(chunk.duration || 0) <= 10800;
+    });
     button.className = "timeline-segment " + (hasPlayable ? "complete" : hasActive ? "active" : "error");
     button.style.left = (window.index * 12.5) + "%";
     button.style.width = "12.5%";
@@ -318,7 +339,7 @@ function renderSegmentTimeline(window) {
   }
   const gaps = [];
   let cursor = 0;
-  window.chunks.filter(isPlayable).slice().sort(function(a, b) {
+  window.chunks.filter(isCurrentlyPlayable).slice().sort(function(a, b) {
     return a.start_time.localeCompare(b.start_time);
   }).forEach(function(chunk) {
     const visualStart = chunk.window_visual_start != null ? chunk.window_visual_start : new Date(chunk.start_time).getTime();
@@ -394,7 +415,7 @@ function seekWithinWindow(seconds) {
   if (!currentWindow) return;
   const target = Math.max(0, Math.min(10800, Number(seconds)));
   const targetMs = currentWindow.start + target * 1000;
-  const chunks = currentWindow.chunks.filter(isPlayable).slice().sort(function(a, b) {
+  const chunks = currentWindow.chunks.filter(isCurrentlyPlayable).slice().sort(function(a, b) {
     return a.start_time.localeCompare(b.start_time);
   });
   if (!chunks.length) return;
@@ -696,11 +717,11 @@ function renderRecordingGroupTabs(groups, sources) {
 }
 
 function showPlayback(recording, queue, offset, autoplay) {
-  if (!isPlayable(recording)) {
+  if (!isCurrentlyPlayable(recording)) {
     message("This recording has no playable video data yet.", true);
     return;
   }
-  playbackQueue = (queue || [recording]).filter(isPlayable);
+  playbackQueue = (queue || [recording]).filter(isCurrentlyPlayable);
   playbackIndex = Math.max(0, playbackQueue.findIndex(function(item) {
     return item.id === recording.id;
   }));
@@ -728,7 +749,7 @@ function showPlayback(recording, queue, offset, autoplay) {
 
 function playableQueueFor(recording, items) {
   return items.filter(function(item) {
-    return isPlayable(item) && item.group_name === recording.group_name && item.monitor_name === recording.monitor_name;
+    return isCurrentlyPlayable(item) && item.group_name === recording.group_name && item.monitor_name === recording.monitor_name;
   }).sort(function(a, b) {
     return a.start_time.localeCompare(b.start_time);
   });
@@ -745,6 +766,10 @@ function updateDaySelection(timestamp, offset) {
   const legacySeek = el("#playback-seek");
   if (legacySeek) legacySeek.value = seconds;
   el("#playback-clock").textContent = formatClock(dayStartMs() + seconds * 1000);
+  // Keep the player range label aligned with the actual recording timestamp.
+  // A recording may cross a 3-hour boundary, so the initially clicked block
+  // is not necessarily the block containing the current playback position.
+  setPlaybackRangeLabel(Math.min(7, Math.floor(seconds / 10800)));
   updatePlayhead(timestamp);
   if (currentWindow) {
     const playhead = el("#segment-playhead");
@@ -1007,8 +1032,8 @@ async function loadRecordings() {
       card.className = "card";
       const info = text(recording.monitor_name + " / " + prettyTime(recording.start_time) + " · " + durationLabel(recording.duration));
       const play = document.createElement("button");
-      play.textContent = isPlayable(recording) ? "Play" : "Unavailable";
-      play.disabled = !isPlayable(recording);
+      play.textContent = isCurrentlyPlayable(recording) ? "Play" : "Unavailable";
+      play.disabled = !isCurrentlyPlayable(recording);
       play.onclick = function() {
         showPlayback(recording, playableQueueFor(recording, result.items));
       };

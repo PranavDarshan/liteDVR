@@ -348,6 +348,11 @@ async def timeline(request: web.Request) -> web.Response:
             continue
         start = parse_timestamp(row["start_time"])
         end = parse_timestamp(row["end_time"]) if row["end_time"] else now
+        # A null end_time is normal for the current segment, but an active row
+        # older than the fixed segment limit is stale metadata. Do not expose
+        # it as a green/initializing block; it belongs in recovery/error state.
+        if row["status"] == "RECORDING" and not row["end_time"] and (now - start).total_seconds() > MAX_SEGMENT_SECONDS:
+            continue
         # Keep every MP4 as an independent chunk. Do not merge overlapping or
         # active rows: the player needs the real file boundaries for seeking.
         start = max(start, day)
