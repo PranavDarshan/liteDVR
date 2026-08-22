@@ -1,7 +1,9 @@
 from pathlib import Path
+import asyncio
 import pytest
 from litedvr.config import Config
 from litedvr.config import load_config
+from litedvr.database import open_database
 from litedvr.recorder import Monitor, Recorder, safe_part, rtsp_with_credentials
 
 def test_defaults_match_specification():
@@ -56,3 +58,28 @@ def test_persistent_ingest_uses_segment_muxer_and_single_rtsp_input(tmp_path):
     assert command[command.index("-segment_time") + 1] == "10800"
     assert "-segment_atclocktime" in command
     assert command[-1] == "pipe:1"
+
+def test_persistent_segment_index_tracks_active_then_complete(tmp_path):
+    async def scenario():
+        db = await open_database(tmp_path / "mock.sqlite3")
+        await db.execute("INSERT INTO monitor_groups(id,name,created_at) VALUES (1,'Home','2026-08-22T00:00:00+00:00')")
+        await db.execute("INSERT INTO monitors(id,group_id,name,rtsp_url,enabled,recording_enabled,segment_minutes,created_at,updated_at) VALUES (1,1,'Door','rtsp://camera/live',1,1,180,'2026-08-22T00:00:00+00:00','2026-08-22T00:00:00+00:00')")
+        await db.commit()
+        recorder = Recorder(db, Config(recordings_path=tmp_path), Monitor(1, "Home", "Door", "rtsp://camera/live",
+            "user", "pass", True, True, 180))
+        segment_dir = tmp_path / "segments"
+        segment_dir.mkdir()
+        segment = segment_dir / "2026-08-22T09-00-00.mp4"
+        segment.write_bytes(b"mock fragmented mp4")
+
+        await recorder._sync_persistent_segments(segment_dir, active=True)
+        row = await (await db.execute("SELECT status,file_size FROM recordings WHERE file_path=?", (str(segment),))).fetchone()
+        assert row["status"] == "RECORDING"
+        assert row["file_size"] == len(b"mock fragmented mp4")
+
+        await recorder._sync_persistent_segments(segment_dir, active=False)
+        row = await (await db.execute("SELECT status FROM recordings WHERE file_path=?", (str(segment),))).fetchone()
+        assert row["status"] == "COMPLETE"
+        await db.close()
+
+    asyncio.run(scenario())
